@@ -23,14 +23,13 @@ import {
 //#endregion
 
 class Player extends React.Component {
-    constructor(props: { arrow: Arrow }) {
+    constructor(props: any) {
         super(props);
         this.moving = new Animated.ValueXY({ x: this.state.x, y: this.state.y });
-        this.arrow = props.arrow;
     }
     state = {
         x: Dimensions.get('window').width*0.90/2 - styles.player.width/2,
-        y: 100,
+        y: Dimensions.get('window').height*0.90/2 - styles.player.height/2,
         momentum: {x:0,y:0},
         stationary: false,
         grounded: false,
@@ -46,7 +45,6 @@ class Player extends React.Component {
         arrowsize: new Animated.Value(100),
     }
     moving: Animated.ValueXY;
-    arrow: Arrow;
 
     componentDidMount() {
         this.movement();
@@ -121,6 +119,21 @@ class Player extends React.Component {
             this.state.momentum.y = -this.state.momentum.y * this.state.bounceloss;
         }
         //#endregion
+        //#region Brick interaction
+        bricks.map((b, i) => {
+            if (this.state.x >= b.state.x &&
+                this.state.x <= b.state.x + b.state.w &&
+                this.state.y >= b.state.y &&
+                this.state.y <= b.state.y + b.state.h
+            ) {
+                this.state.momentum.x = -this.state.momentum.x;
+                this.state.momentum.y = -this.state.momentum.y;
+                if (Math.abs(this.state.momentum.x + this.state.momentum.y) > b.state.toughness) {
+                    b.destroybrick();
+                }
+            }
+        });
+        //#endregion
         Animated.timing(this.moving, { toValue: { x: this.state.x, y: this.state.y }, useNativeDriver: false, duration: 1 }).start();
         setTimeout(() => { this.movement() }, 10);
     }
@@ -129,13 +142,12 @@ class Player extends React.Component {
         const spin = this.state.arrowrot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] });
         return (
             <View>
-                <Arrow ref={arrw => { this.arrow = arrw }} />
-                <Animated.View style={[styles.arrow2, {
+                <Animated.View style={[styles.arrow, {
                     width: this.state.arrowsize,
-                    left: this.moving.x,
-                    top: this.moving.y,
+                    left: Animated.add(Animated.subtract(this.moving.x, Animated.divide(this.state.arrowsize, 2)),styles.player.width/2),
+                    top: Animated.add(this.moving.y,styles.player.width/2),
                     opacity: this.state.arrowshown,
-                    transform: [{ rotate: spin }]
+                    transform: [{ rotate: spin }],
                 }]} />
                 <Animated.View style={[styles.player, {
                     left: this.moving.x,
@@ -145,6 +157,97 @@ class Player extends React.Component {
         );
     }
 }
+
+class Brick extends React.Component {
+    constructor(props: { x: number, y: number, text: string, toughness: number}) {
+        super(props);
+        if (props.toughness == undefined) this.state.toughness = 0;
+    }
+    state = {
+        text: this.props.text,
+        brickanimin: new Animated.Value(0),
+        textin: new Animated.Value(0),
+        brickanim: new Animated.Value(1),
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        toughness: this.props.toughness,
+        dead: false,
+    }
+
+    destroybrick() {
+        Animated.timing(this.state.brickanim, { toValue: 0, useNativeDriver: false, duration: 1000 }).start();
+        bricks.pop();
+        this.setState({ dead: true });
+    }
+
+    componentDidMount() {
+        Animated.timing(this.state.brickanimin, { toValue: 1, useNativeDriver: false, duration: 2000 }).start();
+        setTimeout(() => {
+            Animated.timing(this.state.textin, { toValue: 1, useNativeDriver: false, duration: 1 }).start();
+            bricks.push(this);
+        }, 2000)
+    }
+
+    render() {
+        if (this.state.dead) // There must be other way to do that, that I don't know of.
+            return (
+                <Animated.View style={{ alignSelf: 'flex-start' , opacity: 0}}>
+                    <Text style={[styles.bricktext, {
+                        left: this.props.x,
+                        top: this.props.y + styles.bricktext.fontSize + 5,
+                    }]}>
+                        {this.state.text}
+                    </Text>
+                    <Animated.View style={[styles.brick, {
+                        left: this.props.x,
+                        top: this.props.y,
+                        alignSelf: 'flex-start',
+                        opacity: this.state.brickanim,
+                    }]}
+                        onLayout={(evt) => {
+                            this.state.x = evt.nativeEvent.layout.x;
+                            this.state.y = evt.nativeEvent.layout.y;
+                            this.state.w = evt.nativeEvent.layout.width;
+                            this.state.h = evt.nativeEvent.layout.height;
+                        }}
+                    >
+                        <Text style={[styles.bricktext, { opacity: 0 }]}>{this.state.text}</Text>
+                    </Animated.View>
+                    {this.props.children}
+                </Animated.View>
+            );
+        else
+            return (
+                <Animated.View style={{ alignSelf: 'flex-start', opacity: this.state.brickanimin }}>
+                    <Animated.Text style={[styles.bricktext, {
+                        left: this.props.x,
+                        top: this.props.y + styles.bricktext.fontSize + 5,
+                        opacity: this.state.textin,
+                    }]}>
+                        {this.state.text}
+                    </Animated.Text>
+                    <Animated.View style={[styles.brick, {
+                        left: this.props.x,
+                        top: this.props.y,
+                        alignSelf: 'flex-start',
+                        opacity: this.state.brickanim,
+                    }]}
+                        onLayout={(evt) => {
+                            this.state.x = evt.nativeEvent.layout.x;
+                            this.state.y = evt.nativeEvent.layout.y;
+                            this.state.w = evt.nativeEvent.layout.width;
+                            this.state.h = evt.nativeEvent.layout.height;
+                        }}
+                    >
+                        <Text style={[styles.bricktext, { opacity: 0 }]}>{this.state.text}</Text>
+                    </Animated.View>
+                </Animated.View>
+                );
+    }
+}
+const bricks = Array<Brick>();
 
 class iCV extends React.Component {
     constructor(props: any) {
@@ -167,66 +270,23 @@ class iCV extends React.Component {
                     onMoveShouldSetResponder={() => true}
                     onResponderRelease={(evt) => { this.player.movegesture(evt) }}
                     onResponderMove={(evt) => { this.player.movinggesture(evt) }}
-                    onResponderStart={(evt) => { this.player.startgesture(evt)}}
+                    onResponderStart={(evt) => { this.player.startgesture(evt) }}
                 >
                     <Player ref={plr => { this.player = plr }} />
+                    <Brick x={50} y={50} text="Hello" toughness={50}>
+                        <Brick x={50} y={100} text="This is sample project" toughness={30}>
+                            <Brick x={20} y={150} text="Michal Modzelewski" toughness={10}>
+                                <Brick x={10} y={200} text="2020" />
+                            </Brick>
+                        </Brick>
+                    </Brick>
                 </View>
             </View>
         );
     }
 }
 
-class Arrow extends React.Component {
-    constructor(props: any) {
-        super(props);
-    }
-
-    state = {
-        size: 5,
-        rotation: 0,
-        shown: 1,
-    }
-
-    render() {
-        let size = this.state.size;
-        let rotation = this.state.rotation;
-        let shown = this.state.shown;
-        let rot = String(rotation) + 'deg';
-        //#region Rotations
-        let rad = rotation * Math.PI / 180;
-        let anchor = { x: 0, y: 50 };
-        let loc = { x: 50, y: 50 };
-        let relloc = {
-            x: Math.cos(rad) * anchor.x - Math.sin(rad) * anchor.y + loc.x,
-            y: Math.sin(rad) * anchor.x + Math.cos(rad) * anchor.y + loc.y,
-        };
-        //#endregion
-        return (
-            <Animated.View style={[styles.arrowBody, {
-                width: 30 * size,
-                height: 25 * size,
-                top: relloc.y,
-                left: relloc.x,
-                transform: [{ rotate: rot }],
-                opacity: shown,
-            }]}>
-                <View style={[styles.arrowTail, {
-                    width: 20 * size,
-                    height: 20 * size,
-                    borderTopWidth: 3 * size,
-                    borderTopLeftRadius: 12 * size,
-                }]} />
-                <View style={[styles.arrowTriangle, {
-                    borderTopWidth: 9 * size,
-                    borderRightWidth: 9 * size,
-                    bottom: 9 * size,
-                    right: 3 * size,
-                }]} />
-            </Animated.View>
-        );
-    }
-}
-
+//#region Styles
 const styles = StyleSheet.create({
     bg: {
         backgroundColor: '#333',
@@ -245,55 +305,26 @@ const styles = StyleSheet.create({
         height: 10,
         backgroundColor: '#f00',
     },
-    //#region Arrow
-    arrowBody: {
-        backgroundColor: "transparent",
-        overflow: "visible",
-        width: 30,
-        height: 25,
-    },
-    arrowTriangle: {
-        backgroundColor: "transparent",
-        width: 0,
-        height: 0,
-        borderTopWidth: 9,
-        borderTopColor: "transparent",
-        borderRightWidth: 9,
-        borderRightColor: "#fff",
-        borderStyle: "solid",
-        transform: [{ rotate: "10deg" }],
-        position: "absolute",
-        bottom: 9,
-        right: 3,
-        overflow: "visible",
-    },
-    arrowTail: {
-        backgroundColor: "transparent",
-        position: "absolute",
-        borderBottomColor: "transparent",
-        borderLeftColor: "transparent",
-        borderRightColor: "transparent",
-        borderBottomWidth: 0,
-        borderLeftWidth: 0,
-        borderRightWidth: 0,
-        borderTopWidth: 3,
-        borderTopColor: "#fff",
-        borderStyle: "solid",
-        borderTopLeftRadius: 12,
-        top: 1,
-        left: 0,
-        width: 20,
-        height: 20,
-        transform: [{ rotate: "45deg" }],
-    },
-    //#endregion
-    arrow2: {
+    arrow: {
         position: 'absolute',
-        backgroundColor: '#fff',
+        backgroundColor: 'transparent',
         height: 3,
         alignItems: 'center',
+        borderStyle: 'solid',
+        borderWidth: 1,
+        borderLeftColor: '#fff',
+        borderLeftWidth: 100,
+        borderBottomColor: 'transparent',
+    },
+    bricktext: {
+        color: '#fff',
+        fontSize: 30,
+    },
+    brick: {
+        backgroundColor: '#f70'
     }
 });
+//#endregion
 
 export default iCV;
 
